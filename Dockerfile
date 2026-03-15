@@ -14,10 +14,15 @@ RUN apt-get update && apt-get install -y \
     nodejs \
     npm
 
-# 2. Build zSign (Sử dụng lệnh find để tự động tìm tất cả file .cpp trong mọi thư mục con)
+# 2. Build zSign (Sửa lỗi thiếu file Header .h bằng cách chỉ định Include Path)
 RUN git clone https://github.com/zhlynn/zsign.git && \
     cd zsign && \
-    g++ $(find . -name "*.cpp") -lcrypto -O3 -o zsign && \
+    g++ $(find . -name "*.cpp") \
+    -I./src \
+    -I./common \
+    -I./src/common \
+    -I. \
+    -lcrypto -O3 -o zsign && \
     mv zsign /usr/local/bin/ && \
     cd .. && rm -rf zsign
 
@@ -31,10 +36,10 @@ RUN npm install
 # 5. Copy toàn bộ mã nguồn vào trong container
 COPY . .
 
-# 6. Tạo thư mục 'uploads' để lưu trữ IPA trong quá trình ký
+# 6. Tạo thư mục 'uploads' để lưu trữ IPA và phân quyền
 RUN mkdir -p uploads && chmod 777 uploads
 
-# 7. Render yêu cầu cổng 10000 cho các dịch vụ Web
+# 7. Port mặc định cho Render Web Service
 EXPOSE 10000
 
 # 8. Lệnh khởi chạy server
