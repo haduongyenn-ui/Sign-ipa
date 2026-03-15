@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Web Sign IPA</title>
+  <title>Sign IPA</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -34,7 +34,35 @@
       margin: 16px 0 8px;
       font-weight: 700;
     }
-    select,
+    .app-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .app-card {
+      margin: 0;
+      cursor: pointer;
+    }
+    .app-card input {
+      display: none;
+    }
+    .app-card span {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid #334155;
+      background: #0b1220;
+      color: #fff;
+      text-align: center;
+      font-weight: 700;
+      transition: .2s;
+    }
+    .app-card input:checked + span {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
     input[type="file"],
     input[type="password"] {
       width: 100%;
@@ -82,17 +110,32 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Web Sign IPA</h1>
+    <h1>Sign IPA</h1>
     <p>Chọn app có sẵn, upload ZIP cert và nhập mật khẩu p12.</p>
 
     <form id="signForm">
-      <label>Chọn app</label>
-      <select name="app" required>
-        <option value="esign">ESign</option>
-        <option value="ksign">KSign</option>
-        <option value="gbox">GBox</option>
-        <option value="scarlet">Scarlet</option>
-      </select>
+      <label>Chọn app Muốn Cài</label>
+      <div class="app-grid">
+        <label class="app-card">
+          <input type="radio" name="app" value="esign" checked>
+          <span>ESign</span>
+        </label>
+
+        <label class="app-card">
+          <input type="radio" name="app" value="ksign">
+          <span>KSign</span>
+        </label>
+
+        <label class="app-card">
+          <input type="radio" name="app" value="gbox">
+          <span>GBox</span>
+        </label>
+
+        <label class="app-card">
+          <input type="radio" name="app" value="scarlet">
+          <span>Scarlet</span>
+        </label>
+      </div>
 
       <label>File ZIP cert</label>
       <input type="file" name="certzip" accept=".zip" required>
