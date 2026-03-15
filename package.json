@@ -1,0 +1,14 @@
+{
+  "name": "ipa-render-signer",
+  "version": "1.0.0",
+  "description": "Web sign IPA online and install via itms-services on Render",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "unzipper": "^0.12.3"
+  }
+}

@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ipa-render-signer
+    runtime: node
+    plan: free
+    buildCommand: "bash build.sh && npm install"
+    startCommand: "node server.js"
+    envVars:
+      - key: BASE_URL
+        sync: false
