@@ -100,6 +100,24 @@ function escapeXml(value = "") {
     .replace(/'/g, "&apos;");
 }
 
+function decodeXml(str = "") {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
+function getPlistValue(xml, key) {
+  const reg = new RegExp(
+    `<key>${key}</key>\\s*<(string|integer)>([\\s\\S]*?)<\\/\\1>`,
+    "i"
+  );
+  const match = xml.match(reg);
+  return match ? decodeXml(match[2].trim()) : null;
+}
+
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https") ? https : http;
@@ -171,7 +189,7 @@ function getIpaMetadata(ipaPath) {
   return new Promise((resolve, reject) => {
     exec(
       `unzip -qq "${ipaPath}" -d "${tempDir}"`,
-      { maxBuffer: 1024 * 1024 * 20 },
+      { maxBuffer: 1024 * 1024 * 50 },
       (err) => {
         if (err) {
           cleanupDir(tempDir);
@@ -185,17 +203,17 @@ function getIpaMetadata(ipaPath) {
             return reject(new Error("IPA không có Payload"));
           }
 
-          const appFolder = fs.readdirSync(payloadDir).find((f) => f.endsWith(".app"));
+          const appFolder = fs.readdirSync(payloadDir).find(f => f.endsWith(".app"));
           if (!appFolder) {
             cleanupDir(tempDir);
             return reject(new Error("Không tìm thấy .app trong IPA"));
           }
 
           const plistPath = path.join(payloadDir, appFolder, "Info.plist");
-          const xmlPath = plistPath + ".xml";
+          const xmlPath = path.join(tempDir, "Info.xml");
 
           exec(
-            `plistutil -i "${plistPath}" -o "${xmlPath}"`,
+            `plistutil -i "${plistPath}" -f xml -o "${xmlPath}"`,
             { maxBuffer: 1024 * 1024 * 20 },
             (err2, stdout2, stderr2) => {
               if (err2) {
@@ -211,30 +229,25 @@ function getIpaMetadata(ipaPath) {
                 return reject(new Error("Không đọc được plist XML"));
               }
 
-              const get = (key) => {
-                const reg = new RegExp(
-                  `<key>${key}</key>\\s*<string>([\\s\\S]*?)<\\/string>`
-                );
-                const m = xml.match(reg);
-                return m ? m[1].trim() : null;
-              };
-
-              const metadata = {
-                bundleId:
-                  get("CFBundleIdentifier") ||
-                  "unknown.bundle",
-                version:
-                  get("CFBundleShortVersionString") ||
-                  get("CFBundleVersion") ||
-                  "1.0",
-                title:
-                  get("CFBundleDisplayName") ||
-                  get("CFBundleName") ||
-                  "App"
-              };
+              const bundleId = getPlistValue(xml, "CFBundleIdentifier");
+              const version =
+                getPlistValue(xml, "CFBundleShortVersionString") ||
+                getPlistValue(xml, "CFBundleVersion");
+              const title =
+                getPlistValue(xml, "CFBundleDisplayName") ||
+                getPlistValue(xml, "CFBundleName");
 
               cleanupDir(tempDir);
-              resolve(metadata);
+
+              if (!bundleId) {
+                return reject(new Error("Không đọc được CFBundleIdentifier từ IPA"));
+              }
+
+              resolve({
+                bundleId,
+                version: version || "1",
+                title: title || bundleId
+              });
             }
           );
         } catch (e) {
@@ -325,6 +338,11 @@ app.post("/sign", upload.single("certzip"), async (req, res) => {
 
     const cachedIpaPath = await ensureCachedIpa(appKey, selected.url);
     const meta = await getIpaMetadata(cachedIpaPath);
+
+    if (!meta.bundleId) {
+      cleanupFile(zip?.path);
+      return res.status(500).send("Không lấy được bundle id từ IPA");
+    }
 
     certDir = path.join(UPLOAD_DIR, `cert_${Date.now()}`);
     fs.mkdirSync(certDir, { recursive: true });
