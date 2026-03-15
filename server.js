@@ -36,6 +36,8 @@ const IPA_LIST = {
   }
 };
 
+const SHORT_MAP = {};
+
 for (const dir of [UPLOAD_DIR, FILES_DIR, CACHE_DIR]) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -148,7 +150,6 @@ async function ensureCachedIpa(appKey, url) {
   }
 
   console.log(`📥 Cache missing, downloading: ${appKey}`);
-
   cleanupFile(cachePath);
   await downloadFile(url, cachePath);
 
@@ -219,7 +220,9 @@ function getIpaMetadata(ipaPath) {
               };
 
               const metadata = {
-                bundleId: get("CFBundleIdentifier") || "unknown.bundle",
+                bundleId:
+                  get("CFBundleIdentifier") ||
+                  "unknown.bundle",
                 version:
                   get("CFBundleShortVersionString") ||
                   get("CFBundleVersion") ||
@@ -277,6 +280,18 @@ app.get("/cache-status", (req, res) => {
   }
 
   res.json(result);
+});
+
+app.get("/i/:id", (req, res) => {
+  const id = req.params.id;
+  const data = SHORT_MAP[id];
+
+  if (!data || !data.plistUrl) {
+    return res.status(404).send("Link hết hạn hoặc không tồn tại");
+  }
+
+  const itms = `itms-services://?action=download-manifest&url=${encodeURIComponent(data.plistUrl)}`;
+  return res.redirect(itms);
 });
 
 app.post("/sign", upload.single("certzip"), async (req, res) => {
@@ -387,11 +402,19 @@ app.post("/sign", upload.single("certzip"), async (req, res) => {
 
       fs.writeFileSync(plistPath, plist);
 
-      const install = `itms-services://?action=download-manifest&url=${encodeURIComponent(plistUrl)}`;
+      const shortId = Math.random().toString(36).substring(2, 8);
+
+      SHORT_MAP[shortId] = {
+        plistUrl,
+        createdAt: Date.now()
+      };
+
+      const install = `${BASE_URL}/i/${shortId}`;
 
       setTimeout(() => {
         cleanupFile(outputPath);
         cleanupFile(plistPath);
+        delete SHORT_MAP[shortId];
       }, 1000 * 60 * 30);
 
       return res.json({
@@ -410,13 +433,15 @@ app.post("/sign", upload.single("certzip"), async (req, res) => {
 });
 
 async function warmupCache() {
-  for (const [key, item] of Object.entries(IPA_LIST)) {
-    try {
-      await ensureCachedIpa(key, item.url);
-    } catch (e) {
-      console.log(`Warmup failed for ${key}: ${e.message}`);
-    }
-  }
+  await Promise.all(
+    Object.entries(IPA_LIST).map(async ([key, item]) => {
+      try {
+        await ensureCachedIpa(key, item.url);
+      } catch (e) {
+        console.log(`Warmup failed for ${key}: ${e.message}`);
+      }
+    })
+  );
 }
 
 app.listen(PORT, () => {
