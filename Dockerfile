@@ -4,10 +4,10 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
     git \
-    clang \
-    make \
+    g++ \
+    pkg-config \
     libssl-dev \
-    zlib1g-dev \
+    libminizip-dev \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -17,8 +17,8 @@ RUN npm install
 COPY . .
 
 RUN git clone https://github.com/zhlynn/zsign.git zsign-src && \
-    cd zsign-src && \
-    make && \
+    cd zsign-src/build/linux && \
+    make clean && make && \
     cp zsign /app/zsign && \
     chmod +x /app/zsign
 
