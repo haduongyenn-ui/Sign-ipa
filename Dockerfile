@@ -16,10 +16,10 @@ RUN apt-get update && apt-get install -y \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
 
-# 2. Build zSign (Đã bổ sung đường dẫn cho unzip.h từ minizip)
+# 2. Build zSign (Loại bỏ các file Windows build để tránh lỗi xung đột)
 RUN git clone https://github.com/zhlynn/zsign.git && \
     cd zsign && \
-    g++ $(find . -name "*.cpp") \
+    g++ $(find src common -name "*.cpp") \
     -I./src \
     -I./common \
     -I./src/common \
