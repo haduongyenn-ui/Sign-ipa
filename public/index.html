@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>IPA Signer Online</title>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; padding: 50px; background: #f4f4f9; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 400px; }
+        input { margin-bottom: 15px; width: 100%; }
+        button { background: #007bff; color: white; border: none; padding: 10px; width: 100%; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Ký IPA Trực Tuyến</h2>
+        <form action="/sign" method="post" encType="multipart/form-data">
+            <label>File IPA:</label>
+            <input type="file" name="ipa" accept=".ipa" required>
+            <label>File P12 (Certificate):</label>
+            <input type="file" name="p12" accept=".p12" required>
+            <label>Mật khẩu P12:</label>
+            <input type="text" name="password" placeholder="Nếu có">
+            <label>File MobileProvision:</label>
+            <input type="file" name="prov" accept=".mobileprovision" required>
+            <button type="submit">Bắt đầu ký và Tải về</button>
+        </form>
+    </div>
+</body>
+</html>
