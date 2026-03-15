@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IPA Signer</title>
+  <title>Web Sign IPA</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -19,7 +19,7 @@
       background: #111827;
       border-radius: 18px;
       padding: 24px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
     }
     h1 {
       margin: 0 0 10px;
@@ -34,6 +34,7 @@
       margin: 16px 0 8px;
       font-weight: 700;
     }
+    select,
     input[type="file"],
     input[type="password"] {
       width: 100%;
@@ -53,8 +54,6 @@
       font-size: 16px;
       cursor: pointer;
       margin-top: 18px;
-      text-decoration: none;
-      display: inline-block;
       text-align: center;
     }
     button:hover, .btn:hover {
@@ -72,35 +71,28 @@
       border: 1px solid #1e293b;
       word-break: break-word;
     }
-    .error {
-      color: #fca5a5;
-    }
-    .success {
-      color: #86efac;
-    }
+    .error { color: #fca5a5; }
+    .success { color: #86efac; }
     .links a {
       color: #93c5fd;
       display: block;
       margin-top: 10px;
     }
-    .meta {
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid #1e293b;
-      color: #cbd5e1;
-      font-size: 14px;
-      line-height: 1.6;
-    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Web Sign IPA Online</h1>
-    <p>Upload IPA + ZIP cert, nhập mật khẩu p12, rồi nhận link cài trực tiếp bằng itms-services.</p>
+    <h1>Web Sign IPA</h1>
+    <p>Chọn app có sẵn, upload ZIP cert và nhập mật khẩu p12.</p>
 
     <form id="signForm">
-      <label>File IPA</label>
-      <input type="file" name="ipa" accept=".ipa" required>
+      <label>Chọn app</label>
+      <select name="app" required>
+        <option value="esign">ESign</option>
+        <option value="ksign">KSign</option>
+        <option value="gbox">GBox</option>
+        <option value="scarlet">Scarlet</option>
+      </select>
 
       <label>File ZIP cert</label>
       <input type="file" name="certzip" accept=".zip" required>
@@ -108,13 +100,12 @@
       <label>Mật khẩu p12</label>
       <input type="password" name="p12pass" placeholder="Nhập mật khẩu p12" required>
 
-      <button type="submit">Sign IPA</button>
+      <button type="submit">Sign & Tạo link cài</button>
     </form>
 
     <p class="muted">
-      File ZIP chỉ cần chứa <b>.p12</b> và <b>.mobileprovision</b>.<br>
-      Bundle ID, tên app và version sẽ tự đọc từ IPA.<br>
-      Sau khi sign xong, hãy mở nút cài bằng <b>Safari trên iPhone</b>.
+      ZIP chỉ cần chứa <b>.p12</b> và <b>.mobileprovision</b>.<br>
+      Sau khi sign xong, hãy mở cài đặt bằng <b>Safari trên iPhone</b>.
     </p>
 
     <div id="result" class="result" style="display:none;"></div>
@@ -127,7 +118,7 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       result.style.display = "block";
-      result.innerHTML = "Đang upload, phân tích IPA và sign...";
+      result.innerHTML = "Đang kiểm tra cache, tải app nếu thiếu, rồi sign...";
 
       try {
         const formData = new FormData(form);
@@ -137,30 +128,31 @@
           body: formData
         });
 
-        const data = await res.json();
+        const text = await res.text();
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          result.innerHTML = `<div class="error">❌ ${text}</div>`;
+          return;
+        }
 
         if (!res.ok || !data.success) {
           result.innerHTML = `<div class="error">❌ ${data.error || "Sign thất bại."}</div>`;
           return;
         }
 
-        const meta = data.metadata || {};
-
         result.innerHTML = `
-          <div class="success">✅ Sign thành công</div>
+          <div class="success">✅ Sign thành công: ${data.app}</div>
           <div class="links">
-            <a class="btn" href="${data.install}">Cài trực tiếp</a>
-            <a href="${data.ipa}" target="_blank">Tải file IPA đã sign</a>
-            <a href="${data.plist}" target="_blank">Mở file plist</a>
-          </div>
-          <div class="meta">
-            <div><b>Bundle ID:</b> ${meta.bundleId || "Không rõ"}</div>
-            <div><b>Tên app:</b> ${meta.title || "Không rõ"}</div>
-            <div><b>Version:</b> ${meta.version || "Không rõ"}</div>
+            <button class="btn" onclick="window.location.href='${data.install}'">Cài trực tiếp</button>
+            <a href="${data.ipa}" target="_blank">Tải IPA đã sign</a>
+            <a href="${data.plist}" target="_blank">Mở plist</a>
           </div>
         `;
       } catch (err) {
-        result.innerHTML = `<div class="error">❌ Có lỗi khi upload hoặc sign.</div>`;
+        result.innerHTML = `<div class="error">❌ Có lỗi khi sign.</div>`;
       }
     });
   </script>
