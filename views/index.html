@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign IPA</title>
+  <title>Web Sign IPA</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -106,15 +106,21 @@
       display: block;
       margin-top: 10px;
     }
+    .small-link {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #94a3b8;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>Sign IPA</h1>
+    <h1>Web Sign IPA</h1>
     <p>Chọn app có sẵn, upload ZIP cert và nhập mật khẩu p12.</p>
 
     <form id="signForm">
-      <label>Chọn app Muốn Cài</label>
+      <label>Chọn app</label>
       <div class="app-grid">
         <label class="app-card">
           <input type="radio" name="app" value="esign" checked>
@@ -158,6 +164,14 @@
     const form = document.getElementById("signForm");
     const result = document.getElementById("result");
 
+    function copyLink(link) {
+      navigator.clipboard.writeText(link).then(() => {
+        alert("Đã copy link cài!");
+      }).catch(() => {
+        prompt("Copy link này:", link);
+      });
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       result.style.display = "block";
@@ -190,8 +204,10 @@
           <div class="success">✅ Sign thành công: ${data.app}</div>
           <div class="links">
             <button class="btn" onclick="window.location.href='${data.install}'">Cài trực tiếp</button>
+            <button class="btn" onclick="copyLink('${data.install}')">📋 Sao chép link cài</button>
             <a href="${data.ipa}" target="_blank">Tải IPA đã sign</a>
             <a href="${data.plist}" target="_blank">Mở plist</a>
+            <div class="small-link">${data.install}</div>
           </div>
         `;
       } catch (err) {
