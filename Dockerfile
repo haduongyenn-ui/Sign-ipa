@@ -3,27 +3,29 @@ FROM ubuntu:22.04
 # Chống hỏi múi giờ và các xác nhận khi cài đặt
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Cài đặt công cụ build, OpenSSL 3.0, libzip và Node.js
+# 1. Cài đặt công cụ build, OpenSSL 3.0, libzip, minizip và Node.js
 RUN apt-get update && apt-get install -y \
     git \
     build-essential \
     libssl-dev \
     libzip-dev \
+    libminizip-dev \
     curl \
     zip \
     unzip \
     && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
 
-# 2. Build zSign (Đã hỗ trợ OpenSSL 3.0 và đầy đủ header)
+# 2. Build zSign (Đã bổ sung đường dẫn cho unzip.h từ minizip)
 RUN git clone https://github.com/zhlynn/zsign.git && \
     cd zsign && \
     g++ $(find . -name "*.cpp") \
     -I./src \
     -I./common \
     -I./src/common \
+    -I/usr/include/minizip \
     -I. \
-    -lcrypto -lzip -O3 -o zsign && \
+    -lcrypto -lzip -lz -O3 -o zsign && \
     mv zsign /usr/local/bin/ && \
     cd .. && rm -rf zsign
 
