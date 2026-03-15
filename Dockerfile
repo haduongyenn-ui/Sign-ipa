@@ -1,10 +1,11 @@
-FROM node:22-bullseye
+FROM node:22-bookworm
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
     git \
     g++ \
+    make \
     pkg-config \
     libssl-dev \
     libminizip-dev \
@@ -19,7 +20,7 @@ COPY . .
 RUN git clone https://github.com/zhlynn/zsign.git zsign-src && \
     cd zsign-src/build/linux && \
     make clean && make && \
-    cp zsign /app/zsign && \
+    cp ../../bin/zsign /app/zsign && \
     chmod +x /app/zsign
 
 EXPOSE 3000
