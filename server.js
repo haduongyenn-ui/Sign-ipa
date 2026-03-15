@@ -12,7 +12,9 @@ const ROOT = __dirname;
 const UPLOAD_DIR = path.join(ROOT, "uploads");
 const FILES_DIR = path.join(ROOT, "files");
 const ZSIGN_PATH = path.join(ROOT, "zsign");
-const BASE_URL = process.env.BASE_URL;
+
+// 🔥 FIX BASE_URL (auto bỏ dấu / cuối)
+const BASE_URL = (process.env.BASE_URL || "").replace(/\/+$/, "");
 
 for (const dir of [UPLOAD_DIR, FILES_DIR]) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -49,7 +51,7 @@ function findFile(dir, ext) {
 }
 
 // =====================
-// 🔥 READ IPA METADATA (CHUẨN 100%)
+// 🔥 READ IPA METADATA
 // =====================
 function getIpaMetadata(ipaPath) {
   const tempDir = path.join(UPLOAD_DIR, `ipa_${Date.now()}`);
@@ -68,11 +70,10 @@ function getIpaMetadata(ipaPath) {
         const plistPath = path.join(payload, appFolder, "Info.plist");
         const xmlPath = plistPath + ".xml";
 
-        // 🔥 convert binary plist → xml
         exec(`plistutil -i "${plistPath}" -o "${xmlPath}"`, (err2, stdout, stderr) => {
           if (err2) {
             console.log(stderr);
-            return reject("❌ convert plist lỗi (plistutil)");
+            return reject("❌ convert plist lỗi");
           }
 
           const xml = fs.readFileSync(xmlPath, "utf8");
@@ -83,14 +84,10 @@ function getIpaMetadata(ipaPath) {
             return m ? m[1] : null;
           };
 
-          const bundleId = get("CFBundleIdentifier");
-          const version = get("CFBundleShortVersionString") || get("CFBundleVersion");
-          const name = get("CFBundleDisplayName") || get("CFBundleName");
-
           resolve({
-            bundleId: bundleId || "unknown.bundle",
-            version: version || "1.0",
-            title: name || "App"
+            bundleId: get("CFBundleIdentifier") || "unknown.bundle",
+            version: get("CFBundleShortVersionString") || get("CFBundleVersion") || "1.0",
+            title: get("CFBundleDisplayName") || get("CFBundleName") || "App"
           });
         });
 
@@ -135,11 +132,13 @@ app.post("/sign", upload.fields([
     const p12 = findFile(certDir, ".p12");
     const prov = findFile(certDir, ".mobileprovision");
 
-    if (!p12) return res.send("❌ Không tìm thấy file .p12");
-    if (!prov) return res.send("❌ Không tìm thấy file .mobileprovision");
+    if (!p12) return res.send("❌ Không có file .p12");
+    if (!prov) return res.send("❌ Không có file .mobileprovision");
 
     const outputName = `signed_${Date.now()}.ipa`;
     const outputPath = path.join(FILES_DIR, outputName);
+
+    console.log("👉 SIGN:", outputName);
 
     const cmd = `"${ZSIGN_PATH}" -k "${p12}" -p "${password}" -m "${prov}" -o "${outputPath}" "${ipaPath}"`;
 
@@ -150,7 +149,11 @@ app.post("/sign", upload.fields([
         return res.send(stderr || stdout || err.message);
       }
 
-      // tạo plist
+      // 🔥 check file tồn tại
+      if (!fs.existsSync(outputPath)) {
+        return res.send("❌ Sign xong nhưng không thấy file IPA");
+      }
+
       const plistName = outputName.replace(".ipa", ".plist");
       const plistPath = path.join(FILES_DIR, plistName);
 
@@ -193,6 +196,14 @@ app.post("/sign", upload.fields([
 
       const install = `itms-services://?action=download-manifest&url=${plistUrl}`;
 
+      // 🔥 KHÔNG xoá ngay → delay 10 phút
+      setTimeout(() => {
+        try {
+          fs.unlinkSync(outputPath);
+          fs.unlinkSync(plistPath);
+        } catch {}
+      }, 1000 * 60 * 10);
+
       res.json({
         success: true,
         install,
@@ -209,5 +220,5 @@ app.post("/sign", upload.fields([
 });
 
 app.listen(PORT, () => {
-  console.log("Server chạy");
+  console.log("🚀 Server running");
 });
