@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { exec } = require("child_process");
+const { execFile } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const unzipper = require("unzipper");
@@ -14,6 +14,7 @@ const ROOT = __dirname;
 const UPLOAD_DIR = path.join(ROOT, "uploads");
 const FILES_DIR = path.join(ROOT, "files");
 const CACHE_DIR = path.join(ROOT, "uploads", "cache");
+const ICONS_DIR = path.join(ROOT, "views", "icons");
 const ZSIGN_PATH = path.join(ROOT, "zsign");
 const BASE_URL = (process.env.BASE_URL || "").replace(/\/+$/, "");
 
@@ -33,12 +34,16 @@ const IPA_LIST = {
   scarlet: {
     name: "Scarlet",
     url: "https://github.com/haduongyenn-ui/Sign-ipa/releases/download/khoindvn/Scarlet.ipa"
+  },
+  feather: {
+    name: "Feather",
+    url: "https://github.com/claration/Feather/releases/latest/download/Feather.ipa"
   }
 };
 
 const SHORT_MAP = {};
 
-for (const dir of [UPLOAD_DIR, FILES_DIR, CACHE_DIR]) {
+for (const dir of [UPLOAD_DIR, FILES_DIR, CACHE_DIR, ICONS_DIR]) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -159,11 +164,50 @@ function downloadFile(url, dest) {
   });
 }
 
+function extractAppIcon(ipaPath, appKey) {
+  const destPath = path.join(ROOT, "views", "icons", `${appKey}.png`);
+  if (fs.existsSync(destPath)) return Promise.resolve(destPath);
+
+  console.log(`🎨 Extracting icon for ${appKey}...`);
+
+  return new Promise((resolve) => {
+    let found = false;
+    fs.createReadStream(ipaPath)
+      .pipe(unzipper.Parse())
+      .on("entry", (entry) => {
+        const filePath = entry.path;
+        const isIcon =
+          filePath.endsWith("AppIcon60x60@2x.png") ||
+          filePath.endsWith("AppIcon60x60@3x.png") ||
+          filePath.endsWith("icon.png") ||
+          filePath.endsWith("icon@2x.png");
+
+        if (isIcon && !found) {
+          found = true;
+          entry.pipe(fs.createWriteStream(destPath))
+            .on("finish", () => resolve(destPath))
+            .on("error", () => resolve(null));
+        } else {
+          entry.autodrain();
+        }
+      })
+      .on("error", () => resolve(null))
+      .on("finish", () => {
+        if (!found) resolve(null);
+      });
+  });
+}
+
 async function ensureCachedIpa(appKey, url) {
   const cachePath = path.join(CACHE_DIR, `${appKey}.ipa`);
 
   if (fileExistsAndValid(cachePath)) {
     console.log(`⚡ Cache OK: ${appKey}`);
+    try {
+      await extractAppIcon(cachePath, appKey);
+    } catch (e) {
+      console.log(`Failed to extract icon for ${appKey}: ${e.message}`);
+    }
     return cachePath;
   }
 
@@ -176,6 +220,11 @@ async function ensureCachedIpa(appKey, url) {
   }
 
   console.log(`✅ Cached: ${appKey}`);
+  try {
+    await extractAppIcon(cachePath, appKey);
+  } catch (e) {
+    console.log(`Failed to extract icon for ${appKey}: ${e.message}`);
+  }
   return cachePath;
 }
 
@@ -187,8 +236,9 @@ function getIpaMetadata(ipaPath) {
   fs.mkdirSync(tempDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
-    exec(
-      `unzip -qq "${ipaPath}" -d "${tempDir}"`,
+    execFile(
+      "unzip",
+      ["-qq", ipaPath, "-d", tempDir],
       { maxBuffer: 1024 * 1024 * 50 },
       (err) => {
         if (err) {
@@ -212,8 +262,9 @@ function getIpaMetadata(ipaPath) {
           const plistPath = path.join(payloadDir, appFolder, "Info.plist");
           const xmlPath = path.join(tempDir, "Info.xml");
 
-          exec(
-            `plistutil -i "${plistPath}" -f xml -o "${xmlPath}"`,
+          execFile(
+            "plistutil",
+            ["-i", plistPath, "-f", "xml", "-o", xmlPath],
             { maxBuffer: 1024 * 1024 * 20 },
             (err2, stdout2, stderr2) => {
               if (err2) {
@@ -259,7 +310,10 @@ function getIpaMetadata(ipaPath) {
   });
 }
 
-const upload = multer({ dest: UPLOAD_DIR });
+const upload = multer({
+  dest: UPLOAD_DIR,
+  limits: { fileSize: 10 * 1024 * 1024 } // Giới hạn tệp tải lên tối đa 10MB
+});
 
 app.get("/health", (req, res) => {
   const cacheStatus = {};
@@ -363,22 +417,78 @@ app.post("/sign", upload.single("certzip"), async (req, res) => {
       return res.status(400).send("Không có file .mobileprovision");
     }
 
+    // Tiến hành nhúng chứng chỉ vào IPA trước khi ký
+    let ipaToSign = cachedIpaPath;
+    let tempIpaPath = null;
+    let ipaUnzipDir = null;
+
+    try {
+      ipaUnzipDir = path.join(UPLOAD_DIR, `ipa_mod_${Date.now()}`);
+      fs.mkdirSync(ipaUnzipDir, { recursive: true });
+
+      // 1. Giải nén IPA gốc
+      await new Promise((resolve, reject) => {
+        execFile("unzip", ["-qq", cachedIpaPath, "-d", ipaUnzipDir], (err) => {
+          if (err) reject(new Error("Giải nén IPA thất bại: " + err.message));
+          else resolve();
+        });
+      });
+
+      // 2. Tìm thư mục Payload/*.app
+      const payloadPath = path.join(ipaUnzipDir, "Payload");
+      if (fs.existsSync(payloadPath)) {
+        const appDir = fs.readdirSync(payloadPath).find((f) => f.endsWith(".app"));
+        if (appDir) {
+          const appPath = path.join(payloadPath, appDir);
+
+          // 3. Tạo thư mục signing-assets/cert
+          const certDestDir = path.join(appPath, "signing-assets", "cert");
+          fs.mkdirSync(certDestDir, { recursive: true });
+
+          // 4. Copy file cert và ghi cert.txt
+          fs.copyFileSync(p12, path.join(certDestDir, "cert.p12"));
+          fs.copyFileSync(prov, path.join(certDestDir, "cert.mobileprovision"));
+          fs.writeFileSync(path.join(certDestDir, "cert.txt"), "1");
+
+          // 5. Đóng gói lại thành file IPA tạm thời
+          tempIpaPath = path.join(UPLOAD_DIR, `temp_mod_${Date.now()}.ipa`);
+          await new Promise((resolve, reject) => {
+            execFile("zip", ["-r", "-y", "-q", tempIpaPath, "Payload"], { cwd: ipaUnzipDir, maxBuffer: 1024 * 1024 * 100 }, (err) => {
+              if (err) reject(new Error("Đóng gói lại IPA thất bại: " + err.message));
+              else resolve();
+            });
+          });
+
+          // Sử dụng IPA tạm thời để ký
+          ipaToSign = tempIpaPath;
+        }
+      }
+    } catch (modErr) {
+      console.error("Lỗi khi nhúng chứng chỉ vào IPA:", modErr.message);
+      // Fallback: Nếu không chèn được thì ký IPA gốc như bình thường
+    } finally {
+      if (ipaUnzipDir) cleanupDir(ipaUnzipDir);
+    }
+
     const outputName = `${appKey}_signed_${Date.now()}.ipa`;
     const outputPath = path.join(FILES_DIR, outputName);
 
-    const cmd = `"${ZSIGN_PATH}" -k "${p12}" -p "${password}" -m "${prov}" -o "${outputPath}" "${cachedIpaPath}"`;
+    execFile(
+      ZSIGN_PATH,
+      ["-k", p12, "-p", password, "-m", prov, "-o", outputPath, ipaToSign],
+      { maxBuffer: 1024 * 1024 * 20 },
+      (err, stdout, stderr) => {
+        cleanupFile(zip?.path);
+        cleanupDir(certDir);
+        if (tempIpaPath) cleanupFile(tempIpaPath);
 
-    exec(cmd, { maxBuffer: 1024 * 1024 * 20 }, (err, stdout, stderr) => {
-      cleanupFile(zip?.path);
-      cleanupDir(certDir);
+        if (err) {
+          return res.status(500).send(stderr || stdout || err.message);
+        }
 
-      if (err) {
-        return res.status(500).send(stderr || stdout || err.message);
-      }
-
-      if (!fs.existsSync(outputPath)) {
-        return res.status(500).send("Sign xong nhưng không thấy file IPA");
-      }
+        if (!fs.existsSync(outputPath)) {
+          return res.status(500).send("Sign xong nhưng không thấy file IPA");
+        }
 
       const plistName = outputName.replace(".ipa", ".plist");
       const plistPath = path.join(FILES_DIR, plistName);

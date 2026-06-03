@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     libminizip-dev \
     unzip \
+    zip \
     libplist-utils \
     && rm -rf /var/lib/apt/lists/*
 
